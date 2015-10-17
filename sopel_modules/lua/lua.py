@@ -116,9 +116,10 @@ end""")
 def setup_lua_paths(lua, lua_package_path):
     root = os.path.join(os.path.dirname(__file__), 'lua_modules')
     at_root = lambda *p: os.path.abspath(os.path.join(root, *p))
-    default_path = "{root}/?.lua;{libs}/?.lua".format(
+    default_path = "{root}/?.lua;{libs}/?.lua;{selene}/?.lua".format(
         root=at_root(),
-        libs=at_root('libs')
+        libs=at_root('libs'),
+        selene=at_root('selene')
     )
     if lua_package_path:
         packages_path = ";".join([default_path, lua_package_path])
