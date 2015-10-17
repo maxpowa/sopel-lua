@@ -172,7 +172,8 @@ end
 --
 
 -- maximum memory (in KB) that can be used by Lua script
-sandbox.mem_limit = 10000
+-- 1MB should be enough, would be silly to need more
+sandbox.mem_limit = 1000
 
 function sandbox.enable_memory_limit()
   if sandbox._memory_tracking_enabled then
