@@ -13,10 +13,10 @@ local _string = {
   find = string.find,
   format = string.format,
 --  gmatch = string.gmatch,     -- can be CPU intensive
---  gsub = string.gsub,         -- can be CPU intensive; can result in arbitrary native code execution (in 5.1)?
+  gsub = string.gsub,         -- can be CPU intensive; can result in arbitrary native code execution (in 5.1)?
   len = string.len,
   lower = string.lower,
---  match = string.match,       -- can be CPU intensive
+  match = string.match,       -- can be CPU intensive
 --  rep = string.rep,           -- can eat memory
   reverse = string.reverse,
   sub = string.sub,
@@ -25,6 +25,7 @@ local _string = {
 
 
 sandbox.env = {
+  _VERSION = _VERSION,
   --
   -- 6.1 Basic Functions
   -- http://www.lua.org/manual/5.2/manual.html#6.1
@@ -179,7 +180,7 @@ function sandbox.enable_memory_limit()
   end
   local mt = {__gc = function (u)
     if collectgarbage("count") > sandbox.mem_limit then
-      error("quota reached")
+      error("quota exceeded")
     else
       setmetatable({}, getmetatable(u))
     end
@@ -198,7 +199,7 @@ function sandbox.enable_instruction_limit()
   local function _debug_step(event, line)
     sandbox.instruction_count = sandbox.instruction_count + 1
     if sandbox.instruction_count > sandbox.instruction_limit then
-      error("quota reached", 2)
+      error("quota exceeded", 2)
     end
   end
   debug.sethook(_debug_step, '', 1)
@@ -228,6 +229,7 @@ function sandbox.run(untrusted_code)
   sandbox.fix_metatables()
   sandbox.enable_instruction_limit()
   sandbox.enable_memory_limit()
+
   local untrusted_function, message = load(untrusted_code, nil, 't', sandbox.env)
   if not untrusted_function then return nil, message end
   return pcall(untrusted_function)

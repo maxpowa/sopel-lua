@@ -62,9 +62,11 @@ def lua_cmd(bot, trigger):
 def sandbox_script(lua, script, bot, trigger):
     sandbox = lua.eval('require("sandbox")')
     sandbox["allowed_require_names"]['selene'] = True
-    sandbox["allowed_require_names"]['selene.parser'] = True
+    sandbox["allowed_require_names"]['selenep'] = True
     sandbox["allowed_require_names"]['repr'] = True
-    script = 'local repr = require("repr");function main(bot, trigger) return repr(' + script + ');end'
+    script = ('local repr = require("repr");'
+              'function main(bot, trigger) '
+              '  ' + script + '; end;')
     result = sandbox.run(script)
     if result is not True:
         ok, res = result
