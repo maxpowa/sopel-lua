@@ -41,14 +41,20 @@ class Extras:
         return json.dumps(obj)
 
 
-@module.commands('.*')
+@module.commands('([\S]*)(.*)')
 def listen_for_commands(bot, trigger):
     if trigger.sender.is_nick():
         return
 
+    if not trigger.group(2):
+        return
+
     commands = bot.db.get_channel_value(trigger.sender, 'commands')
-    for command, script in commands:
-        if command == trigger.group(1).lower():
+    if not commands:
+        return
+
+    for command, script in commands.items():
+        if command == trigger.group(2).lower().strip():
             run_untrusted_lua_script(bot, trigger, script)
 
 
@@ -62,11 +68,11 @@ def define_cmd(bot, trigger):
 
     commands = bot.db.get_channel_value(trigger.sender, 'commands')
     if not commands:
-        commands = []
+        commands = dict()
 
-    command = trigger.group(3)
-    script = trigger.group(2).replace(command, '').strip()
-    commands.append((command, script))
+    command = trigger.group(3).lower().strip()
+    script = trigger.group(2).replace(command, '', 1).strip()
+    commands[command] = script
     bot.db.set_channel_value(trigger.sender, 'commands', commands)
     bot.say("Successfully created new command. You should now be able to run '%s' in %s" % (trigger.group(3), trigger.sender))
 
