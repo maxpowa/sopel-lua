@@ -16,6 +16,18 @@ def setup(bot):
     pass
 
 
+class TriggerWrapper:
+    def __init__(self, trigger):
+        self._trigger = trigger
+
+
+    def __getattr__(self, name):
+        try:
+            return getattr(self._trigger, name)
+        except AttributeError as e:
+            raise AttributeError("'Trigger' object has no attribute '%s'" % name)
+
+
 class Extras:
     def str(self, obj):
         if not isinstance(obj, str):
@@ -29,9 +41,46 @@ class Extras:
         return json.dumps(obj)
 
 
+@module.commands('.*')
+def listen_for_commands(bot, trigger):
+    if trigger.sender.is_nick():
+        return
+
+    commands = bot.db.get_channel_value(trigger.sender, 'commands')
+    for command, script in commands:
+        if command == trigger.group(1).lower():
+            run_untrusted_lua_script(bot, trigger, script)
+
+
+@module.commands('def_cmd', 'define_cmd', 'define_command')
+@module.require_privilege(module.OP)
+@module.require_chanmsg('You must be in a channel to define a command')
+def define_cmd(bot, trigger):
+    """.define_cmd <name> <lua script> - Create a command based on the given lua script"""
+    if not trigger.group(2):
+        return bot.say(define_cmd.__doc__)
+
+    commands = bot.db.get_channel_value(trigger.sender, 'commands')
+    if not commands:
+        commands = []
+
+    command = trigger.group(3)
+    script = trigger.group(2).replace(command, '').strip()
+    commands.append((command, script))
+    bot.db.set_channel_value(trigger.sender, 'commands', commands)
+    bot.say("Successfully created new command. You should now be able to run '%s' in %s" % (trigger.group(3), trigger.sender))
+
+
 @module.commands('lua')
 def lua_cmd(bot, trigger):
+    script = trigger.group(2)
+    run_untrusted_lua_script(bot, trigger, script)
+
+
+def run_untrusted_lua_script(bot, trigger, script):
     extras = Extras()
+    trigger = TriggerWrapper(trigger)
+
     _allowed_object_attrs = {}
     _allowed_object_attrs[bot] = [
         'say', 
@@ -44,14 +93,8 @@ def lua_cmd(bot, trigger):
         'get_nick_or_channel_value', 
         'get_preferred_value'
     ]
-    _allowed_object_attrs[trigger] = [
-        'nick',
-        'sender',
-        'groups',
-        'group',
-        'host'
-    ]
     _allowed_object_attrs[extras] = ['*']
+    _allowed_object_attrs[trigger] = ['*']
     
 
     def _attr_getter(obj, attr_name):
@@ -85,7 +128,7 @@ def lua_cmd(bot, trigger):
 
 #    sandbox_script(lua, trigger.group(2), bot, trigger, extras)
     try:
-        sandbox_script(lua, trigger.group(2), bot, trigger, extras)
+        sandbox_script(lua, script, bot, trigger, extras)
     except Exception as e:
         bot.say('[lua] %r' % e)
 
@@ -99,7 +142,6 @@ def sandbox_script(lua, script, bot, trigger, extras):
 #    script = ('function main(bot, trigger, extras) '
 #              '  ' + script + '; end;')
 #    result = sandbox.run(script)
-    trigger = json.loads(json.dumps(trigger))
     wrapped = lua.eval("""
 function(sandbox, bot, trigger, extras, script) 
   options={env={bot=bot, trigger=trigger, extras=extras}}
@@ -129,4 +171,10 @@ def setup_lua_paths(lua, lua_package_path):
     lua.execute("""
 package.path = "{packages_path};" .. package.path
     """.format(packages_path=packages_path))
+    lua.execute("""
+if not _G._selene then _G._selene = {} end
+_G._selene.liveMode = false
+_G._selene.doAutoload = true
+require("selene")
+    """)
 

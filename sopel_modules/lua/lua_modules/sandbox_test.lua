@@ -31,6 +31,7 @@ local sandbox = {
 -- The base environment is merged with the given env option (or an empty table, if no env provided)
 --
 
+local repr = require"repr"
 local selene = require"selene"
 local BASE_ENV = {}
 
@@ -76,9 +77,7 @@ bit32
 
 table
 
-
-serialization
-
+repr
 selene _selene
 
 
@@ -108,9 +107,62 @@ local function protect_module(module, module_name)
   })
 end
 
-('coroutine math os string table selene _selene serialization'):gsub('%S+', function(module_name)
+('coroutine math os string table selene _selene repr'):gsub('%S+', function(module_name)
   BASE_ENV[module_name] = protect_module(BASE_ENV[module_name], module_name)
 end)
+
+-------------------------------------------------------------
+--
+-- Basic memory and CPU limits.
+-- Based on code by Roberto Ierusalimschy.
+-- http://lua-users.org/lists/lua-l/2013-12/msg00406.html
+--
+
+-- maximum memory (in KB) that can be used by Lua script
+-- 1MB should be enough, would be silly to need more
+sandbox.mem_limit = 1000
+
+function enable_memory_limit()
+  if sandbox._memory_tracking_enabled then
+    return
+  end
+  local mt = {__gc = function (u)
+    if collectgarbage("count") > sandbox.mem_limit then
+      error("quota exceeded")
+    else
+      setmetatable({}, getmetatable(u))
+    end
+  end}
+  setmetatable({}, mt)
+  sandbox._memory_tracking_enabled = true
+end
+
+
+-- Maximum number of instructions that can be executed.
+-- XXX: the slowdown only becomes percievable at ~5m instructions.
+sandbox.instruction_limit = 500000
+sandbox.instruction_count = 0
+
+function enable_instruction_limit()
+  local function _debug_step(event, line)
+    sandbox.instruction_count = sandbox.instruction_count + 1
+    if sandbox.instruction_count > sandbox.instruction_limit then
+      error("quota exceeded", 2)
+    end
+  end
+  debug.sethook(_debug_step, '', 1)
+end
+
+
+-- In Lua (but not in LuaJIT) debug hooks are per-coroutine.
+-- Use this function as a replacement for `coroutine.create` to ensure
+-- instruction limit is enforced in coroutines.
+function create_coroutine(f, ...)
+  return coroutine.create(function(...)
+    enable_instruction_limit()
+    return f(...)
+  end, ...)
+end
 
 -- auxiliary functions/variables
 --
@@ -118,7 +170,7 @@ local pack, unpack, error, pcall,xpcall = table.pack, table.unpack, error, pcall
 BASE_ENV.pcall = function(f, ...)
   local result = pack(pcall(f, ...))
   print(result[1], result[2])
-  if (not result[1]) and result[2]:find("Quota exceeded:") then
+  if (not result[1]) and result[2]:find("quota exceeded") then
     error(result[2],0)
   end
   return unpack(result)
@@ -126,7 +178,7 @@ end
 
 BASE_ENV.xpcall = function(f, msgh, ...)
   return xpcall(f, function(msg)
-    if msg:find("Quota exceeded:") then
+    if msg:find("quota exceeded") then
       error(msg,0)
     end
     return msgh(msg)
@@ -155,7 +207,11 @@ end
 -- Public interface: sandbox.protect
 function sandbox.protect(code, options)
   if type(code) ~= 'string' then return end
-  
+
+  -- Prevent from hogging mem/cpu
+  enable_instruction_limit()
+  enable_memory_limit()
+
   options = options or {}
   
   local quota = false
@@ -168,10 +224,9 @@ function sandbox.protect(code, options)
   env = merge(env, BASE_ENV)
   
   env.print = env.print or function(...)
-    env.__toprint = env.__toprint or {}
     local args = table.pack(...)
     for x = 1, args.n do
-      table.insert(env.__toprint, serialization.serialize(args[x]))
+      env.bot.say(repr(args[x]))
     end
   end
   
@@ -192,7 +247,7 @@ function sandbox.protect(code, options)
     if quota then
       local timeout = function()
         cleanup()
-        error('Quota exceeded: ' .. tostring(quota))
+        error('quota exceeded ' .. tostring(quota))
       end
       sethook(timeout, "", quota)
     end
