@@ -77,6 +77,24 @@ def define_cmd(bot, trigger):
     bot.say("Successfully created new command. You should now be able to run '%s' in %s" % (trigger.group(3), trigger.sender))
 
 
+@module.commands('get_cmd', 'get_command')
+@module.require_privilege(module.OP)
+@module.require_chanmsg('You must be in a channel to use this command')
+def get_cmd(bot, trigger):
+    if not trigger.group(2):
+        return bot.say(define_cmd.__doc__)
+
+    commands = bot.db.get_channel_value(trigger.sender, 'commands')
+    if not commands:
+        commands = dict()
+
+    command = trigger.group(3).lower().strip()
+    if command in commands:
+        return bot.reply(commands[command])
+
+    bot.reply("'%s' does not exist" % command)
+
+
 @module.commands('lua')
 def lua_cmd(bot, trigger):
     script = trigger.group(2)
