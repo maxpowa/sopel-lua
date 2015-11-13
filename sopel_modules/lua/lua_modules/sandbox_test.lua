@@ -128,7 +128,7 @@ function enable_memory_limit()
   end
   local mt = {__gc = function (u)
     if collectgarbage("count") > sandbox.mem_limit then
-      error("quota exceeded")
+      error("memory quota exceeded")
     else
       setmetatable({}, getmetatable(u))
     end
@@ -147,7 +147,7 @@ function enable_instruction_limit()
   local function _debug_step(event, line)
     sandbox.instruction_count = sandbox.instruction_count + 1
     if sandbox.instruction_count > sandbox.instruction_limit then
-      error("quota exceeded", 2)
+      error("cpu quota exceeded", 2)
     end
   end
   debug.sethook(_debug_step, '', 1)
@@ -226,20 +226,24 @@ function sandbox.protect(code, options)
   env.print = env.print or function(...)
     local args = table.pack(...)
     for x = 1, args.n do
-      env.bot.say(repr(args[x]))
+      env.bot.say(args[x])
     end
   end
+
+  -- Bot should be defined in env
+  env.say = env.bot.say
+  env.reply = env.bot.reply
   
   local sucess, result = pcall(selene.parse, code)
   if not sucess then
-    error("Selene couldn't parse: \"" .. code .. "\" because: " .. result)
+    error("PRE-SANDBOX ERROR: " .. result)
   end
   code = result
   
   local f, message = load(code,nil,"t",env)
   
   if not f then
-    return error("Function: \"" .. code:gsub("[\n\r]+"," ") .. "\" could not be loaded because: " .. message)
+    return error('PRE-SANDBOX ERROR: ' .. message)
   end
   
   return function(...)
@@ -247,7 +251,7 @@ function sandbox.protect(code, options)
     if quota then
       local timeout = function()
         cleanup()
-        error('quota exceeded ' .. tostring(quota))
+        error('PRE-SANDBOX ERROR: call quota exceeded ' .. tostring(quota))
       end
       sethook(timeout, "", quota)
     end
