@@ -791,6 +791,18 @@ local function tbl_zipped(one, two)
   return zipped
 end
 
+local function tbl_call(self, f, ...)
+  checkType(1, self)
+  checkFunc(2, f)
+  local res = f(self._tbl, ...)
+  local tRes = tblType(res)
+  if tRes == "table" or tRes == "string" then
+    return newWrappedTable(res)
+  else
+    return res
+  end
+end
+
 --------
 -- Bulk data operations on stringlists
 --------
@@ -1165,6 +1177,7 @@ local function loadSeleneConstructs()
   _Table.count = tbl_count
   _Table.exists = tbl_exists
   _Table.forall = tbl_forall
+  _Table.call = tbl_call
 
   _Table.shallowcopy = function(self)
     checkType(1, self)
@@ -1200,12 +1213,17 @@ local function loadSeleneConstructs()
     checkType(1, self, "stringlist")
     return str_iter(tostring(self))
   end
+  _String.call = tbl_call
 end
 
-local function loadSelene(env)
+local function loadSelene(env, lvMode)
   if not env or type(env) ~= "table" then env = _G or _ENV end
   if env._selene and env._selene.isLoaded then return end
   if not env._selene then env._selene = {} end
+
+  if lvMode then
+    env._selene.liveMode = true
+  end
 
   env._selene._new = newWrappedTable
   if not env.checkArg then env.checkArg = checkArg end
@@ -1296,6 +1314,7 @@ local function unloadSelene(env)
     env.bit32.bfor = nil
     env.bit32.nfor = nil
   end
+  env._selene.isLoaded = false
 end
 
 if _selene and not _selene.isLoaded and _selene.doAutoload then
