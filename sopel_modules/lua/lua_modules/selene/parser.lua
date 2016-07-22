@@ -45,6 +45,13 @@ local function tokenize(value, stripcomments, utime)
       escaped = false
     end
 
+    -- process last entry without touching the current char
+    if not quoted and token == "." and tokens[#tokens] == ".." and waiting == false and not string.find(char, "%d") then
+      waiting = nil
+      tokens[#tokens] = tokens[#tokens] .. token
+      token = ""
+    end
+
     if escaped then -- escaped character
       escaped = false
       token = token .. char
@@ -108,6 +115,12 @@ local function tokenize(value, stripcomments, utime)
       quoted = s .. char
       start = i - #s
       token = token .. char
+    elseif char == "-" and not quoted and token == "" and tokens[#tokens] and string.find(tokens[#tokens], "^%-$") then
+      token = tokens[#tokens] .. char
+      quoted = token
+      start = i - #(tokens[#tokens])
+      tokens[#tokens] = nil
+      tokenlines[#tokenlines] = nil
     elseif char == "[" and not quoted and string.find(token, "%[=*$") then -- derpy quote
       local s = string.match(token, "%[=*$")
       quoted = s .. char
@@ -122,11 +135,31 @@ local function tokenize(value, stripcomments, utime)
       if char == "\n" then
         lines = lines + 1
       end
-    elseif char == "=" and not quoted and token == "" and tokens[#tokens] and (string.find(tokens[#tokens], "^[%+%-%*/%%^&|><%.:]$") or string.find(tokens[#tokens], "^([/<>%.])%1$")) then
+    elseif char == "." and not quoted and token == "" and tokens[#tokens] and tokens[#tokens]==".." then
+      waiting = true
+      token = "."
+    elseif char == "=" and not quoted and token == "" and tokens[#tokens] == ".." then
+      tokens[#tokens] = tokens[#tokens] .. char
+    elseif char == "=" and not quoted and token == "" and tokens[#tokens] and (string.find(tokens[#tokens], "^[%+%-%*/%%^&|><:~]$") or string.find(tokens[#tokens], "^([/<>])%1$")) then
       tokens[#tokens] = tokens[#tokens] .. char
     elseif not quoted and token == "" and tokens[#tokens] and ((char == ">" and string.find(tokens[#tokens], "^[%-=]$")) or (char == "-" and string.find(tokens[#tokens], "^<$"))) then
       tokens[#tokens] = tokens[#tokens] .. char
-    elseif not quoted and string.find(char, "^[/<>%.%$]$") then
+    elseif not quoted and char == "." then
+        if waiting == false and string.find(token, "%.$") then
+            token = string.sub(token, 1, #token - 1)
+            if token and token ~= "" then
+              table.insert(tokens, token)
+              table.insert(tokenlines, lines)
+              token = ""
+            end
+            table.insert(tokens, "..")
+            table.insert(tokenlines, lines)
+            waiting = nil
+        else
+            token = token .. char
+            waiting = true
+        end
+    elseif not quoted and string.find(char, "^[/<>%$]$") then
       if waiting == false and token == "" and tokens[#tokens] and string.find(tokens[#tokens], "^%"..char.."$") then
         tokens[#tokens] = tokens[#tokens] .. char
         waiting = nil
@@ -140,7 +173,7 @@ local function tokenize(value, stripcomments, utime)
         table.insert(tokenlines, lines)
         waiting  = true
       end
-    elseif not quoted and string.find(char, "^[%(%):%?,%+%-%*%%^&|=]$") then
+    elseif not quoted and string.find(char, "^[%(%):%?,%+%-%*%%^&~|]$") then
       if token ~= "" then
         table.insert(tokens, token)
         table.insert(tokenlines, lines)

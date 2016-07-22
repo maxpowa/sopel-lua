@@ -134,6 +134,7 @@ def get_cmd(bot, trigger):
 
 
 @module.rate(10)
+@module.require_privilege(module.VOICE)
 @module.commands('lua')
 def lua_cmd(bot, trigger):
     script = trigger.group(2)
@@ -159,7 +160,7 @@ def run_untrusted_lua_script(bot, trigger, script):
     ]
     _allowed_object_attrs[extras] = ['*']
     _allowed_object_attrs[trigger] = ['*']
-    
+
 
     def _attr_getter(obj, attr_name):
         print('accessing %s.%s' % (obj, attr_name))
