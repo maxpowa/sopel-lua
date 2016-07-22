@@ -3,9 +3,13 @@
 from __future__ import unicode_literals, absolute_import, division, print_function
 
 from sopel import module
+from sopel.logger import get_logger
 import os
 import lupa
 import json
+
+
+LOGGER = get_logger('lua')
 
 
 def configure(config):
@@ -163,7 +167,7 @@ def run_untrusted_lua_script(bot, trigger, script):
 
 
     def _attr_getter(obj, attr_name):
-        print('accessing %s.%s' % (obj, attr_name))
+        LOGGER.debug('accessing {}.{}'.format(type(obj).__name__, attr_name))
         if isinstance(obj, dict):
             return obj.get(attr_name)
 
@@ -194,7 +198,6 @@ def run_untrusted_lua_script(bot, trigger, script):
     lua = lupa.LuaRuntime(attribute_handlers=(_attr_getter, _attr_setter))
     setup_lua_paths(lua, None)
 
-#    sandbox_script(lua, trigger.group(2), bot, trigger, extras)
     try:
         sandbox_script(lua, script, bot, trigger, extras)
     except Exception as e:
@@ -208,24 +211,16 @@ def run_untrusted_lua_script(bot, trigger, script):
 
 def sandbox_script(lua, script, bot, trigger, extras):
     sandbox = lua.eval('require("sandbox_test")')
-#    sandbox = lua.eval('require("sandbox")')
-#    sandbox["allowed_require_names"]['selene'] = True
-#    sandbox["allowed_require_names"]['selenep'] = True
-#    sandbox["allowed_require_names"]['repr'] = True
-#    script = ('function main(bot, trigger, extras) '
-#              '  ' + script + '; end;')
-#    result = sandbox.run(script)
     wrapped = lua.eval("""
 function(sandbox, bot, trigger, extras, script) 
   options={env={bot=bot, trigger=trigger, extras=extras}}
-  return sandbox.protect(script, options)()
+  local val = sandbox.protect(script, options)()
+  if not (not val or val == '') then
+    bot.say(val)
+  end
+  return val
 end""")
     return wrapped(sandbox, bot, trigger, extras, script)
-#    if result is not True:
-#        ok, res = result
-#        raise lupa.LuaError(res)
-#    safe_func = sandbox.env["main"]
-#    return safe_func(bot, json.loads(json.dumps(trigger)), extras)
 
 
 def setup_lua_paths(lua, lua_package_path):
